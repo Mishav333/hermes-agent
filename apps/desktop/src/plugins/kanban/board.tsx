@@ -268,6 +268,17 @@ function Card({
   const [dragging, setDragging] = useState(false)
   const meta = columnMeta(task.status)
   const summary = task.latest_summary || task.body
+  const needsInput = task.status === 'blocked' && task.block_kind === 'needs_input' && !!task.latest_summary
+  // A needs_input reason is typically "Needs your call...", N numbered asks,
+  // Recommend lines, and a reply hint — easily 5+ lines. A line-clamp alone
+  // (#125900: Misha reported "I can't see any sampes?") can cut the preview
+  // off before the first numbered question ever appears, leaving the card
+  // face looking empty. Count the numbered asks and show an unmistakable
+  // "N questions waiting" cue instead of a truncated raw preview whenever
+  // there's at least one; fall back to the raw (clamped) text only for a
+  // needs_input block with no numbered list, so plain-prose reasons still
+  // show something on the card face.
+  const asksCount = needsInput && summary ? (summary.match(/^\s*\d+\.\s/gm) ?? []).length : 0
   const fallback = useDefaultAssignee()
   const arc = arcState(task, fallback)
 
@@ -307,8 +318,21 @@ function Card({
           <span className="line-clamp-2 text-[0.8125rem] font-medium leading-snug text-foreground">
             {task.title || task.id}
           </span>
-          {summary && (
-            <span className="line-clamp-2 text-[0.6875rem] leading-snug text-(--ui-text-tertiary)">{summary}</span>
+          {summary &&
+            (asksCount > 0 ? (
+              <span className="text-[0.6875rem] font-medium text-(--ui-accent)">{k.asksWaiting(asksCount)}</span>
+            ) : (
+              <span
+                className={cn(
+                  'text-[0.6875rem] leading-snug text-(--ui-text-tertiary)',
+                  needsInput ? 'line-clamp-4 whitespace-pre-line' : 'line-clamp-2'
+                )}
+              >
+                {summary}
+              </span>
+            ))}
+          {needsInput && asksCount === 0 && (
+            <span className="text-[0.6875rem] font-medium text-(--ui-accent)">{k.open} →</span>
           )}
           <CardFooter arc={arc} task={task} />
         </div>

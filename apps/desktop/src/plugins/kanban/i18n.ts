@@ -29,6 +29,10 @@ type KanbanMessages = {
   noMatch: string
   noTasks: string
   open: string
+  /** Card-face indicator for a needs_input block with numbered asks — shown
+   *  INSTEAD of the raw clamped preview so the ask count is never silently
+   *  clipped away (#125900: Misha couldn't see the asks on the card face). */
+  asksWaiting: (n: number) => string
   select: (modifier: string) => string
   deselect: string
   moveTo: (label: string) => string
@@ -254,6 +258,7 @@ export const en: KanbanMessages = {
   noMatch: 'No tasks match the filters',
   noTasks: 'No tasks on this board',
   open: 'Open',
+  asksWaiting: n => (n === 1 ? '1 question waiting — open to reply' : `${n} questions waiting — open to reply`),
   select: modifier => `Select (${modifier}-click)`,
   deselect: 'Deselect',
   moveTo: label => `Move to ${label}`,
@@ -482,6 +487,7 @@ const ja: KanbanMessages = {
   noMatch: 'フィルタに一致するタスクはありません',
   noTasks: 'このボードにタスクはありません',
   open: '開く',
+  asksWaiting: n => `${n}件の質問が待っています — 開いて返信`,
   select: modifier => `選択（${modifier}クリック）`,
   deselect: '選択解除',
   moveTo: label => `${label} へ移動`,
@@ -709,6 +715,7 @@ const zh: KanbanMessages = {
   noMatch: '没有符合筛选条件的任务',
   noTasks: '此面板暂无任务',
   open: '打开',
+  asksWaiting: n => `有 ${n} 个问题等待回复 — 点击打开`,
   select: modifier => `选择（${modifier}点击）`,
   deselect: '取消选择',
   moveTo: label => `移动到 ${label}`,
@@ -933,6 +940,7 @@ const zhHant: KanbanMessages = {
   noMatch: '沒有符合篩選條件的任務',
   noTasks: '此面板尚無任務',
   open: '開啟',
+  asksWaiting: n => `有 ${n} 個問題待回覆 — 點擊開啟`,
   select: modifier => `選取（${modifier}點擊）`,
   deselect: '取消選取',
   moveTo: label => `移至 ${label}`,

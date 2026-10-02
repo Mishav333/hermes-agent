@@ -27,9 +27,10 @@ import { registry } from '@/contrib/registry'
 import { registerPluginLocales } from '@/i18n/plugin-i18n'
 
 import type * as KanbanApi from './api'
-import { $boardSlug } from './api'
+import { $boardSlug, fetchBoard } from './api'
 import { KanbanBoardPage } from './board'
 import { KANBAN_LOCALES } from './i18n'
+import type { KanbanBoard } from './types'
 
 vi.mock('./api', async importOriginal => ({
   ...(await importOriginal<typeof KanbanApi>()),
@@ -70,6 +71,7 @@ afterEach(() => {
   disposeLocales()
   $boardSlug.set('')
   vi.restoreAllMocks()
+  vi.mocked(fetchBoard).mockClear()
 })
 
 const withQuery = (ui: ReactNode) => <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
@@ -102,6 +104,96 @@ const boardHeader = (scope: HTMLElement) => within(scope).getByRole('banner')
 const switcherEntries = () => registry.getArea(WORKSPACE_PAGE_HEADER_AREA).filter(c => c.id === 'kanban:board-switcher')
 
 describe('kanban board switcher placement (#123597)', () => {
+  // #125900: a needs_input reason is "Needs your call...", N numbered asks,
+  // Recommend lines, and a reply hint — a line-clamp alone cuts the preview
+  // off before the first numbered question, so the card face can look
+  // empty/truncated even though the stored text is correct (Misha: "I can't
+  // see any sampes?"). The card face must show an unmistakable count instead
+  // of a truncated raw preview whenever there's at least one numbered ask.
+  it('shows a "questions waiting" cue instead of a clamped preview when the reason has numbered asks', async () => {
+    const excerpt = 'Needs your call (test)\n1. Sample A or B?\n2. Sample C or D?\nReply on this card.'
+    vi.mocked(fetchBoard).mockResolvedValueOnce({
+      assignees: [],
+      tenants: [],
+      latest_event_id: 1,
+      now: 0,
+      columns: [
+        {
+          name: 'blocked',
+          tasks: [
+            {
+              id: 't_ask',
+              title: 'Sample choices',
+              status: 'blocked',
+              block_kind: 'needs_input',
+              latest_summary: excerpt
+            }
+          ]
+        }
+      ]
+    } as KanbanBoard)
+
+    render(withQuery(workspacePage()))
+
+    expect(await screen.findByText('2 questions waiting — open to reply')).toBeTruthy()
+    // The raw, clampable preview must not also be rendered — the cue replaces
+    // it rather than sitting alongside a truncated excerpt.
+    expect(screen.queryByText(excerpt)).toBeNull()
+  })
+
+  it('uses the singular form for exactly one numbered ask', async () => {
+    const excerpt = 'Needs your call (test)\n1. Sample A or B?\nReply on this card.'
+    vi.mocked(fetchBoard).mockResolvedValueOnce({
+      assignees: [],
+      tenants: [],
+      latest_event_id: 1,
+      now: 0,
+      columns: [
+        {
+          name: 'blocked',
+          tasks: [
+            { id: 't_ask1', title: 'One ask', status: 'blocked', block_kind: 'needs_input', latest_summary: excerpt }
+          ]
+        }
+      ]
+    } as KanbanBoard)
+
+    render(withQuery(workspacePage()))
+
+    expect(await screen.findByText('1 question waiting — open to reply')).toBeTruthy()
+  })
+
+  it('falls back to the clamped preview and an Open cue for a needs_input reason with no numbered list', async () => {
+    const excerpt = 'Needs your call — plain-prose reason with no numbered list at all, just prose.'
+    vi.mocked(fetchBoard).mockResolvedValueOnce({
+      assignees: [],
+      tenants: [],
+      latest_event_id: 1,
+      now: 0,
+      columns: [
+        {
+          name: 'blocked',
+          tasks: [
+            {
+              id: 't_prose',
+              title: 'Prose reason',
+              status: 'blocked',
+              block_kind: 'needs_input',
+              latest_summary: excerpt
+            }
+          ]
+        }
+      ]
+    } as KanbanBoard)
+
+    render(withQuery(workspacePage()))
+
+    const summary = await screen.findByText(excerpt)
+    expect(summary.className).toContain('whitespace-pre-line')
+    expect(summary.className).toContain('line-clamp-4')
+    expect(screen.getByText('Open →')).toBeTruthy()
+  })
+
   it('a split tile shows the switcher in the board header and contributes nothing to the page header', async () => {
     const register = vi.spyOn(registry, 'register')
 

@@ -361,6 +361,8 @@ describe('dependency chips resolve titles', () => {
 // last_failure_error arrive on every payload — the drawer must show them,
 // and a blocked task's diagnostic unblock action must PATCH the task ready.
 describe('blocked task detail', () => {
+  const numberedAsk =
+    'Needs your call (numbered-asks render test)\n1. Confirm sample A or B.\n2. Confirm sample C or D.\nReply on this card, e.g. "1: A, 2: C".'
   const blockedDetail = {
     ...legacyDetail,
     attachments: [] as [],
@@ -394,6 +396,74 @@ describe('blocked task detail', () => {
     expect(screen.getByText('×2')).toBeTruthy()
     expect(screen.getByText('3')).toBeTruthy()
     expect(screen.getByText('RuntimeError: boom')).toBeTruthy()
+  })
+
+  it('puts the complete needs_input reason before a long description, with literal line breaks', async () => {
+    // Markdown rendering trims the body's trailing whitespace, so match
+    // against its trimmed form rather than the raw repeated-space string
+    // used to force a long description.
+    const longBody = 'Long task body '.repeat(200)
+    detail = {
+      ...blockedDetail,
+      task: { ...blockedDetail.task, body: longBody, latest_summary: numberedAsk }
+    }
+    openDrawer()
+
+    // Default text normalization collapses newlines to spaces before
+    // comparing against the matcher string, so an exact multi-line match
+    // needs its own normalizer that preserves the literal text — otherwise
+    // this assertion would silently never find the (correctly rendered)
+    // node and could mask a real regression.
+    const preserveNewlines = { normalizer: (text: string) => text }
+    const ask = await screen.findByText(numberedAsk, preserveNewlines)
+    const description = screen.getByText(longBody.trim())
+    expect(ask.className).toContain('whitespace-pre-wrap')
+    expect(ask.textContent).toBe(numberedAsk)
+    expect(ask.compareDocumentPosition(description) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getAllByText(numberedAsk, preserveNewlines)).toHaveLength(1)
+    expect(screen.queryByText(en.latestSummary)).toBeNull()
+  })
+
+  it('does not promote a retained needs_input reason after the task is unblocked', async () => {
+    detail = {
+      ...blockedDetail,
+      task: { ...blockedDetail.task, status: 'todo', latest_summary: numberedAsk }
+    }
+    openDrawer()
+
+    expect(await screen.findByText(en.latestSummary)).toBeTruthy()
+    expect(screen.getByText(/Needs your call \(numbered-asks render test\)/)).toBeTruthy()
+    expect(screen.queryByText(en.col.blocked.label)).toBeNull()
+  })
+
+  // #125900/isAdminSummary false-positive check: a real needs_input numbered
+  // reason ("Needs your call...") must never be mistaken for the dispatcher's
+  // administrative "status changed to X (dashboard/direct)" reclaim note and
+  // hidden. Pair this with the true-positive case below so a regression on
+  // either side of the regex shows up here, not just in the Mac.
+  it('never treats a needs_input numbered-asks reason as an admin reclaim note', async () => {
+    detail = {
+      ...blockedDetail,
+      task: { ...blockedDetail.task, status: 'todo', latest_summary: 'Needs your call (dashboard/direct)' }
+    }
+    openDrawer()
+
+    // This string deliberately echoes "(dashboard/direct)" to stress the
+    // regex's anchoring — it must still render because it doesn't start with
+    // "status changed to".
+    expect(await screen.findByText('Needs your call (dashboard/direct)')).toBeTruthy()
+  })
+
+  it('still hides a genuine admin reclaim note from Latest summary', async () => {
+    detail = {
+      ...blockedDetail,
+      task: { ...blockedDetail.task, status: 'todo', latest_summary: 'status changed to ready (dashboard/direct)' }
+    }
+    openDrawer()
+
+    await screen.findByRole('heading', { name: blockedDetail.task.title })
+    expect(screen.queryByText('status changed to ready (dashboard/direct)')).toBeNull()
+    expect(screen.queryByText(en.latestSummary)).toBeNull()
   })
 
   it('hides block detail on legacy payloads and recovered tasks', async () => {

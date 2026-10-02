@@ -1048,6 +1048,15 @@ export function TaskDrawer({
             <div className="flex min-h-0 flex-1">
               <div className="min-w-0 flex-1 overflow-y-auto px-5 pb-5">
                 <div className="flex flex-col gap-5">
+                  {task.status === 'blocked' && task.block_kind === 'needs_input' && task.latest_summary && (
+                    <Callout title={k.col.blocked.label} tone={SEVERITY_TONE.warning}>
+                      {/* Preserve the exact numbered asks and reply hint, rather than
+                          relying on markdown's treatment of single newlines. */}
+                      <p className="whitespace-pre-wrap text-[0.8125rem] leading-relaxed text-(--ui-text-secondary) [overflow-wrap:anywhere]">
+                        {task.latest_summary}
+                      </p>
+                    </Callout>
+                  )}
                   {task.status === 'ready' && !task.assignee && !defaultAssignee && (
                     <Callout title={k.readyUnassignedTitle} tone={SEVERITY_TONE.warning}>
                       <p className="text-[0.6875rem] leading-relaxed text-(--ui-text-secondary)">
@@ -1082,11 +1091,13 @@ export function TaskDrawer({
                     </Section>
                   )}
 
-                  {task.latest_summary && !isAdminSummary(task.latest_summary) && (
-                    <Section label={k.latestSummary}>
-                      <TaskMarkdown text={task.latest_summary} />
-                    </Section>
-                  )}
+                  {task.latest_summary &&
+                    !isAdminSummary(task.latest_summary) &&
+                    !(task.status === 'blocked' && task.block_kind === 'needs_input') && (
+                      <Section label={k.latestSummary}>
+                        <TaskMarkdown text={task.latest_summary} />
+                      </Section>
+                    )}
 
                   <FeedTabs
                     commentPending={commentMut.isPending || requeueMut.isPending}
